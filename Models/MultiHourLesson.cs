@@ -3,7 +3,7 @@ using HtmlAgilityPack;
 
 namespace WebCrawler.Models
 {
-    public class LessonOnNextRow
+    public class MultiHourLesson
     {
         #region Properties
 
@@ -17,9 +17,9 @@ namespace WebCrawler.Models
 
         #region Constructors
 
-        public LessonOnNextRow() {}
+        public MultiHourLesson() {}
 
-        public LessonOnNextRow(string id, int hour, int day, HtmlNode lesson)
+        public MultiHourLesson(string id, int hour, int day, HtmlNode lesson)
         {
             this.Id = id;
             this.Hour = hour;

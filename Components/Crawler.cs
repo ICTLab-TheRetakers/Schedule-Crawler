@@ -56,7 +56,7 @@ namespace WebCrawler.Components
         private void GetLessons(HtmlNode schedule)
         {
             // Create list for multihour lessons
-            var lessonsToAddNextHour = new List<LessonOnNextRow>();
+            var lessonsToAddNextHour = new List<MultiHourLesson>();
 
             //Create new schedule and set properties
             var timeSchedule = new Schedule();
@@ -172,7 +172,7 @@ namespace WebCrawler.Components
 
                                 if (lessonsToAddNextHour.FirstOrDefault(q => q.Lesson == currentLesson && q.Day == lesson && q.Hour == nextHour) == null)
                                 {
-                                    var lessonNextHour = new LessonOnNextRow();
+                                    var lessonNextHour = new MultiHourLesson();
                                     lessonNextHour.Id = String.Format("{0}{1}", nextHour, lesson);
                                     lessonNextHour.Day = lesson;
                                     lessonNextHour.Hour = nextHour;
