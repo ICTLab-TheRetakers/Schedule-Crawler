@@ -10,43 +10,39 @@ namespace WebCrawler.Components
 {
     public class Crawler
     {
-        public async void StartCrawlingAsync()
+        #region Properties
+
+        private string Department;
+        private int Week;
+        private int Quarter;
+
+        #endregion
+
+        #region Constructor
+
+        public Crawler(string department, int week, int quarter)
         {
-            await GetSchedule();
+            this.Department = department;
+            this.Week = week;
+            this.Quarter = quarter;
         }
 
-        #region Day and time logic
+        #endregion
 
-        //rows[2] = 08:30 - 09:20
-        //rows[4] = 09:20 - 10:10
-        //rows[6] = 10:30 - 11:20
-        //rows[8] = 11:20 - 12:10
-        //rows[10] = 12:10 - 13:00
-        //rows[12] = 13:00 - 13:50
-        //rows[14] = 13:50 - 14:40
-        //rows[16] = 15:00 - 15:50
-        //rows[18] = 15:50 - 16:40
-        //rows[20] = 17:00 - 17:50
-        //rows[22] = 17:50 - 18:40
-        //rows[24] = 18:40 - 19:30
-        //rows[26] = 19:30 - 20:20
-        //rows[28] = 20:20 - 21:10
-        //rows[30] = 21:10 - 22:00
+        #region Public Methods
 
-        //ChildNodes[1] = tijd
-        //ChildNodes[3] = les 1 op maandag
-        //ChildNodes[5] = les 1 op dinsdag
-        //ChildNodes[7] = les 1 op woensdag
-        //ChildNodes[9] = les 1 op donderdag
-        //ChildNodes[11] = les 1 op vrijdag
+        public async Task StartCrawlingAsync(string room)
+        {
+            await GetSchedule(this.Quarter, this.Week, this.Department, room);
+        }
 
         #endregion
 
         #region Private Methods
 
-        private async Task GetSchedule()
+        private async Task GetSchedule(int quarterOfYear, int week, string department, string room)
         {
-            var url = "http://misc.hro.nl/roosterdienst/webroosters/CMI/kw3/15/r/r00028.htm";
+            var url = String.Format("http://misc.hro.nl/roosterdienst/webroosters/{0}/kw{1}/{2}/r/{3}.htm", department, quarterOfYear, week, room);
             var httpClient = new HttpClient();
 
             var html = await httpClient.GetStringAsync(url);
@@ -54,30 +50,39 @@ namespace WebCrawler.Components
             document.LoadHtml(html);
 
             var table = document.DocumentNode.SelectNodes("/html/body/center/table[1]")[0];
-            GetLessonByTime(table);
+            GetLessons(table);
         }
 
-        private void GetLessonByTime(HtmlNode schedule)
+        private void GetLessons(HtmlNode schedule)
         {
-            var timeSchedule = new Schedule();
-            var addToNextRow = new List<LessonNextHour>();
+            // Create list for multi hour lessons
+            var lessonsToAddNextHour = new List<LessonOnNextRow>();
 
-            // Time rows from 08:30 to 22:00
+            //Create new schedule and set properties
+            var timeSchedule = new Schedule();
+            timeSchedule.Department = this.Department;
+            timeSchedule.Week = this.Week;
+            timeSchedule.QuarterOfYear = this.Quarter;
+
+            // Loop through each row (row is an hour, e.x. 08:30-09:20)
             for (int time = 2; time < schedule.ChildNodes.Count; time += 2)
             {
+                var addMultiHourLesson = false;
+
+                // Get hour
+                //Get lessons from current hour
                 var row = schedule.ChildNodes[time];
                 var lessons = row.ChildNodes.Where(n => n.Name == "td").ToList();
-                var addPrevious = false;
 
                 for (int lesson = 1; lesson < lessons.Count; lesson++)
                 {
                     // Get current hour
-                    var hourId = RemoveChars(lessons[0].InnerText.Split(' ')[0]);
-                    var hour = RemoveChars(lessons[0].InnerText.Split(' ')[1]);
+                    var hourNumber = RemoveChars(lessons[0].InnerText.Split(' ')[0]);
+                    var currentHour = RemoveChars(lessons[0].InnerText.Split(' ')[1]);
 
                     // Create new lesson and set start time
                     var newLesson = new Lesson(lesson);
-                    newLesson.StartTime = hour;
+                    newLesson.StartTime = currentHour;
 
                     // Get current lesson and info
                     var currentLesson = lessons[lesson];
@@ -86,16 +91,18 @@ namespace WebCrawler.Components
                     if (lessons.Count != 6)
                     {
                         var id = Convert.ToInt32(String.Format("{0}{1}", time, lesson));
-                        if (addToNextRow.FirstOrDefault(q => q.Hour == time
-                        && q.Day == lesson && q.Id == id) != null)
+                        if (lessonsToAddNextHour.FirstOrDefault(q => q.Hour == time && q.Day == lesson && q.Id == id) != null)
                         {
-                            var previousLesson = addToNextRow.FirstOrDefault(q => q.Hour == time && q.Day == lesson && q.Id == id);
+                            var previousLesson = lessonsToAddNextHour.FirstOrDefault(q => q.Hour == time && q.Day == lesson && q.Id == id);
                             if (previousLesson != null)
                             {
                                 lessons.Insert(lesson, previousLesson.Lesson);
-                                addToNextRow.Remove(previousLesson);
 
-                                addPrevious = true;
+                                // Remove lesson from list
+                                lessonsToAddNextHour.Remove(previousLesson);
+
+                                // Set multi hour lesson to true
+                                addMultiHourLesson = true;
                                 currentLesson = previousLesson.Lesson;
                             }
                         }
@@ -135,38 +142,43 @@ namespace WebCrawler.Components
                         }
 
                         // Add lesson to current day
-                        if (addPrevious == true && timeSchedule.Days.FirstOrDefault(q => q.Id == lesson).Lessons
-                                .FirstOrDefault(q => q.StartTime == hour) == null)
+                        if (addMultiHourLesson == true && timeSchedule.Days.FirstOrDefault(q => q.Id == lesson).Lessons
+                                .FirstOrDefault(q => q.StartTime == currentHour) == null)
                         {
                             timeSchedule.Days.FirstOrDefault(q => q.Id == lesson).Lessons.Add(newLesson);
-                            addPrevious = false;
+
+                            // Reset multi hour lesson
+                            addMultiHourLesson = false;
+
+                            // Continue to next day
                             continue;
-                        }
 
-                        // Add lesson to current day
-                        if (timeSchedule.Days.FirstOrDefault(q => q.Id == lesson).Lessons
-                                .FirstOrDefault(q => q.StartTime == hour) == null)
+                        } else if (timeSchedule.Days.FirstOrDefault(q => q.Id == lesson).Lessons
+                                .FirstOrDefault(q => q.StartTime == currentHour) == null)
                         {
                             timeSchedule.Days.FirstOrDefault(q => q.Id == lesson).Lessons.Add(newLesson);
                         }
 
-                        // If row span is greater than two, than this lesson must be added at the next hour and same day
+                        // If row span is greater than two, 
+                        // than the current lesson must be added at the next hour and same day
                         if (rowSpan > 2)
                         {
                             var difference = rowSpan - 2;
                             var totalLoops = difference / 2;
+
                             for (int j = 1; j < totalLoops + 1; j++)
                             {
                                 var nextHour = (2 * j) + time;
-                                if (addToNextRow.FirstOrDefault(q => q.Lesson == currentLesson && q.Day == lesson && q.Hour == nextHour) == null)
+
+                                if (lessonsToAddNextHour.FirstOrDefault(q => q.Lesson == currentLesson && q.Day == lesson && q.Hour == nextHour) == null)
                                 {
-                                    var lessonNextHour = new LessonNextHour();
+                                    var lessonNextHour = new LessonOnNextRow();
                                     lessonNextHour.Id = Convert.ToInt32(String.Format("{0}{1}", nextHour, lesson));
                                     lessonNextHour.Day = lesson;
                                     lessonNextHour.Hour = nextHour;
                                     lessonNextHour.Lesson = currentLesson;
 
-                                    addToNextRow.Add(lessonNextHour);
+                                    lessonsToAddNextHour.Add(lessonNextHour);
                                 }
                             }
                         }

@@ -10,10 +10,11 @@ namespace WebCrawler
 
         static void Main(string[] args)
         {
-            _crawler = new Crawler();
+            _crawler = new Crawler("CMI", 15, 3);
             Task.Run(async () =>
             {
-                _crawler.StartCrawlingAsync();
+                await _crawler.StartCrawlingAsync("r00024");
+
             }).GetAwaiter().GetResult();
 
             Console.ReadKey();

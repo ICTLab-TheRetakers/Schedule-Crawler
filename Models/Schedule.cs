@@ -9,8 +9,8 @@ namespace WebCrawler.Models
 
         [Key]
         public string Classroom { get; set; }
-        public string StartDate { get; set; }
-        public string EndDate { get; set; }
+        public int Week { get; set; }
+        public int QuarterOfYear { get; set; }
         public string Department { get; set; }
         public ICollection<Day> Days { get; set; }
 
