@@ -22,15 +22,14 @@ namespace WebCrawler.Models
         {
             this.Days = new List<Day>()
             {
+                new Day(1),
+                new Day(2),
                 new Day(3),
-                new Day(5),
-                new Day(7),
-                new Day(9),
-                new Day(11)
+                new Day(4),
+                new Day(5)
             };
         }
 
         #endregion
-
     }
 }

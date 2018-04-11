@@ -2,7 +2,6 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using HtmlAgilityPack;
 using WebCrawler.Models;
@@ -16,6 +15,33 @@ namespace WebCrawler.Components
             await GetSchedule();
         }
 
+        #region Day and time logic
+
+        //rows[2] = 08:30 - 09:20
+        //rows[4] = 09:20 - 10:10
+        //rows[6] = 10:30 - 11:20
+        //rows[8] = 11:20 - 12:10
+        //rows[10] = 12:10 - 13:00
+        //rows[12] = 13:00 - 13:50
+        //rows[14] = 13:50 - 14:40
+        //rows[16] = 15:00 - 15:50
+        //rows[18] = 15:50 - 16:40
+        //rows[20] = 17:00 - 17:50
+        //rows[22] = 17:50 - 18:40
+        //rows[24] = 18:40 - 19:30
+        //rows[26] = 19:30 - 20:20
+        //rows[28] = 20:20 - 21:10
+        //rows[30] = 21:10 - 22:00
+
+        //ChildNodes[1] = tijd
+        //ChildNodes[3] = les 1 op maandag
+        //ChildNodes[5] = les 1 op dinsdag
+        //ChildNodes[7] = les 1 op woensdag
+        //ChildNodes[9] = les 1 op donderdag
+        //ChildNodes[11] = les 1 op vrijdag
+
+        #endregion
+
         #region Private Methods
 
         private async Task GetSchedule()
@@ -28,165 +54,119 @@ namespace WebCrawler.Components
             document.LoadHtml(html);
 
             var table = document.DocumentNode.SelectNodes("/html/body/center/table[1]")[0];
-            GetLessons(table);
+            GetLessonByTime(table);
         }
 
-        private void GetLessons(HtmlNode schedule)
+        private void GetLessonByTime(HtmlNode schedule)
         {
             var timeSchedule = new Schedule();
-            var rows = schedule.ChildNodes;
-            var daysToSkip = new List<int>();
+            var addToNextRow = new List<LessonNextHour>();
 
-            for (int time = 2; time < rows.Count; time = time + 2)
+            // Time rows from 08:30 to 22:00
+            for (int time = 2; time < schedule.ChildNodes.Count; time += 2)
             {
-                var currentHour = "";
-                var currentHourId = -1;
-                var row = rows[time];
+                var row = schedule.ChildNodes[time];
+                var lessons = row.ChildNodes.Where(n => n.Name == "td").ToList();
+                var addPrevious = false;
 
-                for (int day = 3; day < row.ChildNodes.Count; day = day + 2)
+                for (int lesson = 1; lesson < lessons.Count; lesson++)
                 {
-                    if (day % 2 != 0)
+                    // Get current hour
+                    var hourId = RemoveChars(lessons[0].InnerText.Split(' ')[0]);
+                    var hour = RemoveChars(lessons[0].InnerText.Split(' ')[1]);
+
+                    // Create new lesson and set start time
+                    var newLesson = new Lesson(lesson);
+                    newLesson.StartTime = hour;
+
+                    // Get current lesson and info
+                    var currentLesson = lessons[lesson];
+
+                    // If contains key with tuple time and lesson, then add lesson of previous hour to this hour
+                    if (lessons.Count != 6)
                     {
-                        if (row.ChildNodes.Where(q => q.Name == "td").ToList().Count < 6)
+                        var id = Convert.ToInt32(String.Format("{0}{1}", time, lesson));
+                        if (addToNextRow.FirstOrDefault(q => q.Hour == time
+                        && q.Day == lesson && q.Id == id) != null)
                         {
-                            if (daysToSkip.Contains(day))
+                            var previousLesson = addToNextRow.FirstOrDefault(q => q.Hour == time && q.Day == lesson && q.Id == id);
+                            if (previousLesson != null)
                             {
-                                daysToSkip.Remove(day);
-                                continue;
+                                lessons.Insert(lesson, previousLesson.Lesson);
+                                addToNextRow.Remove(previousLesson);
+
+                                addPrevious = true;
+                                currentLesson = previousLesson.Lesson;
                             }
                         }
+                    }
 
-                        var lessonNode = row.ChildNodes[day];
-                        var rowSpan = int.Parse(lessonNode.Attributes.FirstOrDefault(q => q.Name == "rowspan").Value);
+                    // Get lesson and info
+                    var lessonInfo = currentLesson.SelectSingleNode("table").ChildNodes.Descendants("font").ToList();
 
-                        //Set current hour and hour id
-                        currentHour = RemoveChars(row.ChildNodes[1].InnerText.Split(' ')[1]);
-                        currentHourId = int.Parse(RemoveChars(row.ChildNodes[1].InnerText.Split(' ')[0]));
+                    // Get lesson row span
+                    var rowSpan = Convert.ToInt32(currentLesson.Attributes["rowspan"].Value);
 
-                        //Get lesson information
-                        var lessonInfo = lessonNode.SelectSingleNode("table")
-                            .ChildNodes
-                            .Descendants("font")
-                            .ToList();
-
-                        //Create new lesson
-                        var lesson = new Hour(currentHourId + day + time);
-                        lesson.StartTime = currentHour;
-
-                        if (lessonInfo != null)
+                    if (lessonInfo != null)
+                    {
+                        // Set lesson properties
+                        switch (lessonInfo.Count)
                         {
-                            //Set available information by looking at the count of elements in lessonInfo
-                            switch (lessonInfo.Count)
-                            {
-                                case 0:
-                                    lesson.Course = "Geen les";
-
-                                    break;
-                                case 1:
-                                    lesson.Course = RemoveChars(lessonInfo[0].InnerText);
-
-                                    break;
-                                case 2:
-                                    lesson.Class = RemoveChars(lessonInfo[0].InnerText);
-                                    lesson.Course = RemoveChars(lessonInfo[1].InnerText);
-
-                                    break;
-                                case 3:
-                                    lesson.Class = RemoveChars(lessonInfo[0].InnerText);
-                                    lesson.Course = RemoveChars(lessonInfo[2].InnerText);
-                                    lesson.Teacher = RemoveChars(lessonInfo[1].InnerText);
-
-                                    break;
-                            }
+                            case 0:
+                                newLesson.Course = "Geen les";
+                                newLesson.Class = String.Empty;
+                                newLesson.Teacher = String.Empty;
+                                break;
+                            case 1:
+                                newLesson.Course = RemoveChars(lessonInfo[0].InnerText);
+                                newLesson.Class = String.Empty;
+                                newLesson.Teacher = String.Empty;
+                                break;
+                            case 2:
+                                newLesson.Course = RemoveChars(lessonInfo[1].InnerText);
+                                newLesson.Class = RemoveChars(lessonInfo[0].InnerText);
+                                newLesson.Teacher = String.Empty;
+                                break;
+                            case 3:
+                                newLesson.Course = RemoveChars(lessonInfo[2].InnerText);
+                                newLesson.Class = RemoveChars(lessonInfo[0].InnerText);
+                                newLesson.Teacher = RemoveChars(lessonInfo[1].InnerText);
+                                break;
                         }
 
-                        //If lesson not exists on current day, then add the lesson
-                        if (timeSchedule.Days.FirstOrDefault(q => q.Id == day).Lessons
-                                .FirstOrDefault(q => q.StartTime == lesson.StartTime && q.Course == lesson.Course) == null)
+                        // Add lesson to current day
+                        if (addPrevious == true && timeSchedule.Days.FirstOrDefault(q => q.Id == lesson).Lessons
+                                .FirstOrDefault(q => q.StartTime == hour) == null)
                         {
-                            timeSchedule.Days.FirstOrDefault(q => q.Id == day).Lessons.Add(lesson);
+                            timeSchedule.Days.FirstOrDefault(q => q.Id == lesson).Lessons.Add(newLesson);
+                            addPrevious = false;
+                            continue;
                         }
 
+                        // Add lesson to current day
+                        if (timeSchedule.Days.FirstOrDefault(q => q.Id == lesson).Lessons
+                                .FirstOrDefault(q => q.StartTime == hour) == null)
+                        {
+                            timeSchedule.Days.FirstOrDefault(q => q.Id == lesson).Lessons.Add(newLesson);
+                        }
+
+                        // If row span is greater than two, than this lesson must be added at the next hour and same day
                         if (rowSpan > 2)
                         {
                             var difference = rowSpan - 2;
-                            var whiteSpace = 0;
-
-                            switch (lessonInfo.Count)
+                            var totalLoops = difference / 2;
+                            for (int j = 1; j < totalLoops + 1; j++)
                             {
-                                case 1:
-                                    whiteSpace = rowSpan - (2 * 1);
-                                    break;
-                                case 2:
-                                    whiteSpace = rowSpan - (2 * 2);
-                                    break;
-                                case 3:
-                                    whiteSpace = rowSpan - (2 * 3);
-                                    break;
-                                default:
-                                    break;
-                            }
-
-                            var timesToLoop = difference / 2;
-                            for (int i = 0; i < timesToLoop; i++)
-                            {
-                                var currentTimeRow = time;
-                                while (currentTimeRow < rowSpan)
+                                var nextHour = (2 * j) + time;
+                                if (addToNextRow.FirstOrDefault(q => q.Lesson == currentLesson && q.Day == lesson && q.Hour == nextHour) == null)
                                 {
-                                    //Increment by two
-                                    currentTimeRow += 2;
+                                    var lessonNextHour = new LessonNextHour();
+                                    lessonNextHour.Id = Convert.ToInt32(String.Format("{0}{1}", nextHour, lesson));
+                                    lessonNextHour.Day = lesson;
+                                    lessonNextHour.Hour = nextHour;
+                                    lessonNextHour.Lesson = currentLesson;
 
-                                    //Get time of lesson on current rowspan
-                                    var nextHour = RemoveChars(rows[currentTimeRow].InnerText.Split(' ')[1]);
-
-                                    if (whiteSpace > 0)
-                                    {
-                                        for (int j = 0; j < whiteSpace; j++)
-                                        {
-                                            if (j > 0)
-                                            {
-                                                currentTimeRow += 2;
-                                                nextHour = RemoveChars(rows[currentTimeRow].InnerText.Split(' ')[1]);
-                                            }
-
-                                            //Create new lesson
-                                            var nextLesson = new Hour(currentHourId + day + time);
-                                            nextLesson.Class = RemoveChars(lessonInfo[0].InnerText);
-                                            nextLesson.Course = RemoveChars(lessonInfo[2].InnerText);
-                                            nextLesson.Teacher = RemoveChars(lessonInfo[1].InnerText);
-                                            nextLesson.StartTime = nextHour;
-
-                                            //Add to day
-                                            if (timeSchedule.Days.FirstOrDefault(q => q.Id == day).Lessons
-                                                .FirstOrDefault(q => q.StartTime == nextLesson.StartTime
-                                                && q.Course == nextLesson.Course) == null)
-                                            {
-                                                timeSchedule.Days.FirstOrDefault(q => q.Id == day).Lessons.Add(nextLesson);
-                                            }
-                                        }
-                                    } else
-                                    {
-                                        //Create new lesson
-                                        var nextLesson = new Hour(currentHourId + day + time);
-                                        nextLesson.Class = RemoveChars(lessonInfo[0].InnerText);
-                                        nextLesson.Course = RemoveChars(lessonInfo[2].InnerText);
-                                        nextLesson.Teacher = RemoveChars(lessonInfo[1].InnerText);
-                                        nextLesson.StartTime = nextHour;
-
-                                        //Add to day
-                                        if (timeSchedule.Days.FirstOrDefault(q => q.Id == day).Lessons
-                                            .FirstOrDefault(q => q.StartTime == nextLesson.StartTime
-                                            && q.Course == nextLesson.Course) == null)
-                                        {
-                                            timeSchedule.Days.FirstOrDefault(q => q.Id == day).Lessons.Add(nextLesson);
-                                        }
-                                    }
-
-                                    //Add to days to skip list
-                                    if (!daysToSkip.Contains(day))
-                                    {
-                                        daysToSkip.Add(day);
-                                    }
+                                    addToNextRow.Add(lessonNextHour);
                                 }
                             }
                         }
@@ -194,58 +174,44 @@ namespace WebCrawler.Components
                 }
             }
 
-            //Print all lessons
-            PrintLessons(timeSchedule);
-
-            //rows[2] = 08:30 - 09:20
-            //rows[4] = 09:20 - 10:10
-            //rows[6] = 10:30 - 11:20
-            //rows[8] = 11:20 - 12:10
-            //rows[10] = 12:10 - 13:00
-            //rows[12] = 13:00 - 13:50
-            //rows[14] = 13:50 - 14:40
-            //rows[16] = 15:00 - 15:50
-            //rows[18] = 15:50 - 16:40
-            //rows[20] = 17:00 - 17:50
-            //rows[22] = 17:50 - 18:40
-            //rows[24] = 18:40 - 19:30
-            //rows[26] = 19:30 - 20:20
-            //rows[28] = 20:20 - 21:10
-            //rows[30] = 21:10 - 22:00
-
-            //ChildNodes[1] = tijd
-            //ChildNodes[3] = les 1 op maandag
-            //ChildNodes[5] = les 1 op dinsdag
-            //ChildNodes[7] = les 1 op woensdag
-            //ChildNodes[9] = les 1 op donderdag
-            //ChildNodes[11] = les 1 op vrijdag
+            Print(timeSchedule);
         }
 
-        private void PrintLessons(Schedule schedule)
+        private string GetDay(int day)
+        {
+            string dayOfWeek = "";
+            switch (day)
+            {
+                case 1:
+                    dayOfWeek = "Monday";
+                    break;
+                case 2:
+                    dayOfWeek = "Tuesday";
+                    break;
+                case 3:
+                    dayOfWeek = "Wednesday";
+                    break;
+                case 4:
+                    dayOfWeek = "Thursday";
+                    break;
+                case 5:
+                    dayOfWeek = "Friday";
+                    break;
+            }
+
+            return dayOfWeek;
+        }
+
+        private void Print(Schedule schedule)
         {
             foreach (var day in schedule.Days)
             {
-                Console.WriteLine("\n" + day.WeekDay + "\n---------------------------");
+                Console.WriteLine(day.WeekDay + "\n---------------------------");
                 foreach (var lesson in day.Lessons)
                 {
-                    if (String.IsNullOrEmpty(lesson.Teacher) && String.IsNullOrEmpty(lesson.Class) && String.IsNullOrEmpty(lesson.Teacher) && String.IsNullOrEmpty(lesson.Course))
-                    {
-                        //All properties are empty
-                        Console.WriteLine("Geen les");
-                    } else if (String.IsNullOrEmpty(lesson.Teacher) && String.IsNullOrEmpty(lesson.Class))
-                    {
-                        //Only course is not empty
-                        Console.WriteLine(String.Format("{0} begint vanaf {1}", lesson.Course, lesson.StartTime));
-                    } else if (String.IsNullOrEmpty(lesson.Teacher))
-                    {
-                        //Only teacher is empty
-                        Console.WriteLine(String.Format("{0} tijdens {1} om {2}", lesson.Class, lesson.Course, lesson.StartTime));
-                    } else
-                    {
-                        //All properties are not empty
-                        Console.WriteLine(String.Format("{0} gegeven door {1} aan klas {2} om {3}", lesson.Course, lesson.Teacher, lesson.Class, lesson.StartTime));
-                    }
+                    Console.WriteLine(lesson.ToString());
                 }
+                Console.WriteLine("\n\n");
             }
         }
 

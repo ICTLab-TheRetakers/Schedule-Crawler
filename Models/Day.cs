@@ -10,7 +10,7 @@ namespace WebCrawler.Models
         [Key]
         public int Id { get; set; }
         public string WeekDay { get; set; }
-        public ICollection<Hour> Lessons { get; set; }
+        public ICollection<Lesson> Lessons { get; set; }
 
         #endregion
 
@@ -18,13 +18,13 @@ namespace WebCrawler.Models
 
         public Day()
         {
-            this.Lessons = new List<Hour>();
+            this.Lessons = new List<Lesson>();
         }
 
         public Day(int id)
         {
             this.Id = id;
-            Lessons = new List<Hour>();
+            Lessons = new List<Lesson>();
             this.SetDay(this.Id);
         }
 
@@ -46,19 +46,19 @@ namespace WebCrawler.Models
             string dayOfWeek = "";
             switch (day)
             {
-                case 3:
+                case 1:
                     dayOfWeek = "Monday";
                     break;
-                case 5:
+                case 2:
                     dayOfWeek = "Tuesday";
                     break;
-                case 7:
+                case 3:
                     dayOfWeek = "Wednesday";
                     break;
-                case 9:
+                case 4:
                     dayOfWeek = "Thursday";
                     break;
-                case 11:
+                case 5:
                     dayOfWeek = "Friday";
                     break;
                 default:
@@ -70,6 +70,5 @@ namespace WebCrawler.Models
         }
 
         #endregion
-
     }
 }
