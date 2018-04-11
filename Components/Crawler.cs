@@ -55,7 +55,7 @@ namespace WebCrawler.Components
 
         private void GetLessons(HtmlNode schedule)
         {
-            // Create list for multi hour lessons
+            // Create list for multihour lessons
             var lessonsToAddNextHour = new List<LessonOnNextRow>();
 
             //Create new schedule and set properties
@@ -90,7 +90,7 @@ namespace WebCrawler.Components
                     // If contains key with tuple time and lesson, then add lesson of previous hour to this hour
                     if (lessons.Count != 6)
                     {
-                        var id = Convert.ToInt32(String.Format("{0}{1}", time, lesson));
+                        var id = String.Format("{0}{1}", time, lesson);
                         if (lessonsToAddNextHour.FirstOrDefault(q => q.Hour == time && q.Day == lesson && q.Id == id) != null)
                         {
                             var previousLesson = lessonsToAddNextHour.FirstOrDefault(q => q.Hour == time && q.Day == lesson && q.Id == id);
@@ -101,7 +101,7 @@ namespace WebCrawler.Components
                                 // Remove lesson from list
                                 lessonsToAddNextHour.Remove(previousLesson);
 
-                                // Set multi hour lesson to true
+                                // Set multihour lesson to true
                                 addMultiHourLesson = true;
                                 currentLesson = previousLesson.Lesson;
                             }
@@ -147,7 +147,7 @@ namespace WebCrawler.Components
                         {
                             timeSchedule.Days.FirstOrDefault(q => q.Id == lesson).Lessons.Add(newLesson);
 
-                            // Reset multi hour lesson
+                            // Reset multihour lesson
                             addMultiHourLesson = false;
 
                             // Continue to next day
@@ -173,7 +173,7 @@ namespace WebCrawler.Components
                                 if (lessonsToAddNextHour.FirstOrDefault(q => q.Lesson == currentLesson && q.Day == lesson && q.Hour == nextHour) == null)
                                 {
                                     var lessonNextHour = new LessonOnNextRow();
-                                    lessonNextHour.Id = Convert.ToInt32(String.Format("{0}{1}", nextHour, lesson));
+                                    lessonNextHour.Id = String.Format("{0}{1}", nextHour, lesson);
                                     lessonNextHour.Day = lesson;
                                     lessonNextHour.Hour = nextHour;
                                     lessonNextHour.Lesson = currentLesson;
@@ -186,7 +186,60 @@ namespace WebCrawler.Components
                 }
             }
 
+            // If list with multihour lessons is not empty, then add these to the schedule
+            if (true)
+            {
+                foreach (var lesson in lessonsToAddNextHour)
+                {
+                    var hour = lesson.Hour;
+                    var day = lesson.Day;
+
+                    var hourString = GetHour(hour);
+                    var lessonToInsert = ConvertToLesson(lesson.Lesson, hourString);
+
+                    // Insert lesson at index
+                    timeSchedule.Days.FirstOrDefault(q => q.Id == day).Lessons.Insert(((hour / 2) - 1), lessonToInsert);
+                }
+            }
+
             Print(timeSchedule);
+        }
+
+        private Lesson ConvertToLesson(HtmlNode node, string hour)
+        {
+            Lesson lesson = new Lesson(new Random().Next());
+            lesson.StartTime = hour;
+
+            var lessonInfo = node.SelectSingleNode("table").ChildNodes.Descendants("font").ToList();
+            if (lessonInfo != null)
+            {
+                // Set lesson properties
+                switch (lessonInfo.Count)
+                {
+                    case 0:
+                        lesson.Course = "Geen les";
+                        lesson.Class = String.Empty;
+                        lesson.Teacher = String.Empty;
+                        break;
+                    case 1:
+                        lesson.Course = RemoveChars(lessonInfo[0].InnerText);
+                        lesson.Class = String.Empty;
+                        lesson.Teacher = String.Empty;
+                        break;
+                    case 2:
+                        lesson.Course = RemoveChars(lessonInfo[1].InnerText);
+                        lesson.Class = RemoveChars(lessonInfo[0].InnerText);
+                        lesson.Teacher = String.Empty;
+                        break;
+                    case 3:
+                        lesson.Course = RemoveChars(lessonInfo[2].InnerText);
+                        lesson.Class = RemoveChars(lessonInfo[0].InnerText);
+                        lesson.Teacher = RemoveChars(lessonInfo[1].InnerText);
+                        break;
+                }
+            }
+
+            return lesson;
         }
 
         private string GetDay(int day)
@@ -212,6 +265,61 @@ namespace WebCrawler.Components
             }
 
             return dayOfWeek;
+        }
+
+        private string GetHour(int hour)
+        {
+            string time = "";
+            switch (hour)
+            {
+                case 2:
+                    time = "08:30-09:20";
+                    break;
+                case 4:
+                    time = "09:20-10:10";
+                    break;
+                case 6:
+                    time = "10:30-11:20";
+                    break;
+                case 8:
+                    time = "11:20-12:10";
+                    break;
+                case 10:
+                    time = "12:10-13:00";
+                    break;
+                case 12:
+                    time = "13:00-13:50";
+                    break;
+                case 14:
+                    time = "13:50-14:40";
+                    break;
+                case 16:
+                    time = "15:00-15:50";
+                    break;
+                case 18:
+                    time = "15:50-16:40";
+                    break;
+                case 20:
+                    time = "17:00-17:50";
+                    break;
+                case 22:
+                    time = "17:50-18:40";
+                    break;
+                case 24:
+                    time = "18:40-19:30";
+                    break;
+                case 26:
+                    time = "19:30-20:20";
+                    break;
+                case 28:
+                    time = "20:20-21:10";
+                    break;
+                case 30:
+                    time = "21:10-22:00";
+                    break;
+            }
+
+            return time;
         }
 
         private void Print(Schedule schedule)

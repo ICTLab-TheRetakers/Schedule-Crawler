@@ -8,7 +8,7 @@ namespace WebCrawler.Models
         #region Properties
 
         [Key]
-        public int Id { get; set; }
+        public string Id { get; set; }
         public int Hour { get; set; }
         public int Day { get; set; }
         public HtmlNode Lesson { get; set; }
@@ -19,7 +19,7 @@ namespace WebCrawler.Models
 
         public LessonOnNextRow() {}
 
-        public LessonOnNextRow(int id, int hour, int day, HtmlNode lesson)
+        public LessonOnNextRow(string id, int hour, int day, HtmlNode lesson)
         {
             this.Id = id;
             this.Hour = hour;

@@ -13,7 +13,13 @@ namespace WebCrawler
             _crawler = new Crawler("CMI", 15, 3);
             Task.Run(async () =>
             {
-                await _crawler.StartCrawlingAsync("r00024");
+                try
+                {
+                    await _crawler.StartCrawlingAsync("r00028");
+                } catch (Exception ex)
+                {
+                    Console.WriteLine(ex.Message);
+                }
 
             }).GetAwaiter().GetResult();
 

@@ -10,7 +10,7 @@ namespace WebCrawler.Models
         [Key]
         public int Id { get; set; }
         public string WeekDay { get; set; }
-        public ICollection<Lesson> Lessons { get; set; }
+        public List<Lesson> Lessons { get; set; }
 
         #endregion
 

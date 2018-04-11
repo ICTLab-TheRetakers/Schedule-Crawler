@@ -12,7 +12,7 @@ namespace WebCrawler.Models
         public int Week { get; set; }
         public int QuarterOfYear { get; set; }
         public string Department { get; set; }
-        public ICollection<Day> Days { get; set; }
+        public List<Day> Days { get; set; }
 
         #endregion
 
